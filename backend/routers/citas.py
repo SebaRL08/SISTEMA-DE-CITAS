@@ -1,18 +1,21 @@
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException
 from backend.database import db_cursor
 from backend.schemas import CitaEstadoIn, CitaIn
-from backend.security import current_user, require_admin
+from backend.security import current_user
 
 router = APIRouter(prefix="/api/citas", tags=["Citas"])
 
 CONSULTA = """
     SELECT c.id_cita, c.estado, c.fecha_creacion,
-           u.nombre AS cliente, s.nombre AS servicio,
+           u.nombre AS cliente, p.nombre AS proveedor,
+           s.nombre AS servicio, s.duracion_minutos,
            h.fecha, LEFT(CAST(h.hora_inicio AS CHAR), 5) AS hora_inicio,
            LEFT(CAST(h.hora_fin AS CHAR), 5) AS hora_fin
     FROM citas c
     JOIN usuarios u  ON u.id_usuario  = c.id_usuario
     JOIN servicios s ON s.id_servicio = c.id_servicio
+    JOIN usuarios p  ON p.id_usuario  = s.id_proveedor
     JOIN horarios h  ON h.id_horario  = c.id_horario
 """
 
@@ -23,16 +26,27 @@ def reservar(datos: CitaIn, user=Depends(current_user)):
         raise HTTPException(status_code=403, detail="Solo los clientes pueden reservar")
     with db_cursor(commit=True) as cur:
         # FOR UPDATE bloquea la fila: dos clientes no pueden reservar a la vez el mismo horario
-        cur.execute("SELECT estado FROM horarios WHERE id_horario=%s FOR UPDATE", (datos.id_horario,))
+        cur.execute(
+            "SELECT id_proveedor, estado, (fecha >= CURDATE()) AS vigente "
+            "FROM horarios WHERE id_horario=%s FOR UPDATE",
+            (datos.id_horario,),
+        )
         horario = cur.fetchone()
         if not horario:
             raise HTTPException(status_code=404, detail="Horario no encontrado")
-        if horario["estado"] != "disponible":
+        if horario["estado"] != "disponible" or not horario["vigente"]:
             raise HTTPException(status_code=409, detail="Ese horario ya no está disponible")
-        cur.execute("SELECT activo FROM servicios WHERE id_servicio=%s", (datos.id_servicio,))
+        cur.execute(
+            "SELECT s.activo, s.id_proveedor FROM servicios s "
+            "JOIN usuarios u ON u.id_usuario = s.id_proveedor "
+            "WHERE s.id_servicio=%s AND u.activo = 1",
+            (datos.id_servicio,),
+        )
         servicio = cur.fetchone()
         if not servicio or not servicio["activo"]:
             raise HTTPException(status_code=404, detail="Servicio no disponible")
+        if servicio["id_proveedor"] != horario["id_proveedor"]:
+            raise HTTPException(status_code=422, detail="El servicio y el horario son de proveedores distintos")
         cur.execute(
             "INSERT INTO citas (id_usuario, id_servicio, id_horario, estado) VALUES (%s,%s,%s,'confirmada')",
             (user["id_usuario"], datos.id_servicio, datos.id_horario),
@@ -42,33 +56,45 @@ def reservar(datos: CitaIn, user=Depends(current_user)):
     return {"id_cita": id_cita, "mensaje": "Cita confirmada"}
 
 
-@router.get("/mis-citas")
-def mis_citas(user=Depends(current_user)):
-    with db_cursor() as cur:
-        cur.execute(CONSULTA + " WHERE c.id_usuario = %s ORDER BY h.fecha DESC, h.hora_inicio",
-                    (user["id_usuario"],))
-        return cur.fetchall()
-
-
 @router.get("")
-def todas_las_citas(_=Depends(require_admin)):
+def listar_citas(id_proveedor: Optional[int] = None, user=Depends(current_user)):
+    """Cliente: las suyas. Proveedor: las de sus servicios. Administrador: todas."""
+    cond, params = [], []
+    if user["rol"] == "cliente":
+        cond.append("c.id_usuario = %s")
+        params.append(user["id_usuario"])
+    elif user["rol"] == "proveedor":
+        cond.append("s.id_proveedor = %s")
+        params.append(user["id_usuario"])
+    elif id_proveedor:
+        cond.append("s.id_proveedor = %s")
+        params.append(id_proveedor)
+    where = "WHERE " + " AND ".join(cond) if cond else ""
     with db_cursor() as cur:
-        cur.execute(CONSULTA + " ORDER BY h.fecha DESC, h.hora_inicio")
+        cur.execute(f"{CONSULTA} {where} ORDER BY h.fecha DESC, h.hora_inicio", tuple(params))
         return cur.fetchall()
 
 
 @router.patch("/{id_cita}/estado")
 def cambiar_estado(id_cita: int, datos: CitaEstadoIn, user=Depends(current_user)):
-    es_admin = user["rol"] == "administrador"
+    rol = user["rol"]
     with db_cursor(commit=True) as cur:
-        cur.execute("SELECT id_usuario, id_horario, estado FROM citas WHERE id_cita=%s FOR UPDATE", (id_cita,))
+        cur.execute(
+            "SELECT c.id_usuario, c.id_horario, c.estado, s.id_proveedor "
+            "FROM citas c JOIN servicios s ON s.id_servicio = c.id_servicio "
+            "WHERE c.id_cita=%s FOR UPDATE",
+            (id_cita,),
+        )
         cita = cur.fetchone()
         if not cita:
             raise HTTPException(status_code=404, detail="Cita no encontrada")
-        if not es_admin and cita["id_usuario"] != user["id_usuario"]:
-            raise HTTPException(status_code=403, detail="Esa cita no es tuya")
-        if not es_admin and datos.estado != "cancelada":
-            raise HTTPException(status_code=403, detail="Solo puedes cancelar tus citas")
+        if rol == "cliente":
+            if cita["id_usuario"] != user["id_usuario"]:
+                raise HTTPException(status_code=403, detail="Esa cita no es tuya")
+            if datos.estado != "cancelada":
+                raise HTTPException(status_code=403, detail="Solo puedes cancelar tus citas")
+        elif rol == "proveedor" and cita["id_proveedor"] != user["id_usuario"]:
+            raise HTTPException(status_code=403, detail="Esa cita no es de tus servicios")
         if cita["estado"] != "confirmada":
             raise HTTPException(status_code=409, detail="Solo se pueden modificar citas confirmadas")
         cur.execute("UPDATE citas SET estado=%s WHERE id_cita=%s", (datos.estado, id_cita))
