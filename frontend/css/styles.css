@@ -1,0 +1,41 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: "Segoe UI", Arial, sans-serif; background: #f2f4f8; color: #222; }
+header { background: #7a1f2b; color: #fff; padding: 12px 24px; display: flex;
+         justify-content: space-between; align-items: center; }
+header h1 { margin: 0; font-size: 1.3rem; }
+main { max-width: 960px; margin: 24px auto; padding: 0 16px; }
+.tarjeta { background: #fff; border-radius: 10px; padding: 20px; margin-bottom: 16px;
+           box-shadow: 0 1px 4px rgba(0,0,0,.1); }
+.estrecha { max-width: 400px; margin: 40px auto; }
+h2 { margin-top: 0; font-size: 1.1rem; }
+label { display: block; margin-bottom: 12px; font-size: .9rem; }
+input, select { width: 100%; padding: 9px; margin-top: 4px; border: 1px solid #bbb; border-radius: 6px; }
+button { background: #7a1f2b; color: #fff; border: 0; padding: 9px 16px; border-radius: 6px;
+         cursor: pointer; font-size: .9rem; }
+button:hover { opacity: .9; }
+button:disabled { background: #aaa; cursor: not-allowed; }
+button.secundario { background: #666; }
+button.peligro { background: #b3261e; }
+button.pequeno { padding: 5px 10px; font-size: .8rem; margin-right: 4px; }
+.tabs { display: flex; gap: 6px; margin-bottom: 16px; }
+.tab { background: #ddd; color: #333; }
+.tab.activa { background: #7a1f2b; color: #fff; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.servicio { border: 2px solid #ddd; border-radius: 8px; padding: 12px; cursor: pointer; }
+.servicio.sel { border-color: #7a1f2b; background: #fbeff1; }
+.servicio small { color: #666; }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+.chip { background: #e8eaf0; color: #222; }
+.chip.sel { background: #7a1f2b; color: #fff; }
+.fila { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; align-items: center; }
+.fila input { flex: 1; min-width: 120px; margin: 0; }
+table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+th, td { text-align: left; padding: 8px; border-bottom: 1px solid #e3e3e3; }
+.badge { padding: 2px 8px; border-radius: 10px; font-size: .75rem; background: #ddd; }
+.confirmada, .disponible { background: #d7f0dd; }
+.cancelada, .bloqueado { background: #f6d6d6; }
+.completada, .reservado { background: #d6e4f6; }
+.mensaje { padding: 10px 14px; border-radius: 6px; margin-bottom: 14px; }
+.mensaje.ok { background: #d7f0dd; color: #14532d; }
+.mensaje.error { background: #f6d6d6; color: #7f1d1d; }
+.oculto { display: none !important; }
