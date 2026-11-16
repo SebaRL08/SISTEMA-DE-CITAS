@@ -1,137 +1,85 @@
-let serviciosAdmin = [];
-
-async function iniciarAdmin() {
-  await Promise.all([cargarServiciosAdmin(), cargarHorariosAdmin(), cargarCitasAdmin(), cargarUsuariosAdmin()])
-    .catch(e => mostrarMensaje(e.message, "error"));
+// ================= RESUMEN GLOBAL =================
+async function renderResumenAdmin(cont) {
+  const [usuarios, servicios, horarios, citas] = await Promise.all([
+    api("/usuarios"), api("/servicios"), api("/horarios"), api("/citas"),
+  ]);
+  cont.innerHTML = `
+    <div class="encabezado"><h2>📊 Panel de control</h2></div>
+    <div class="stats">
+      ${stat("👥", usuarios.length, "Usuarios")}
+      ${stat("🛠️", usuarios.filter(u => u.rol === "proveedor").length, "Proveedores")}
+      ${stat("🙋", usuarios.filter(u => u.rol === "cliente").length, "Clientes")}
+      ${stat("🗓️", citas.filter(c => c.estado === "confirmada").length, "Citas confirmadas")}
+      ${stat("🕒", horarios.filter(h => h.estado === "disponible").length, "Cupos libres")}
+      ${stat("🧩", servicios.filter(s => s.activo).length, "Servicios activos")}
+    </div>
+    <h3 class="subtitulo">Citas recientes</h3>
+    <div id="recientes">${citas.slice(0, 5).map(c => tarjetaCita(c, "administrador")).join("")
+      || vacio("📭", "Todavía no hay citas.")}</div>`;
+  animarNumeros(cont);
+  document.getElementById("recientes").onclick = (e) => accionCita(e, () => renderResumenAdmin(cont));
 }
 
-function tabla(columnas, filas) {
-  if (!filas.length) return "<p>Sin registros.</p>";
-  return `<table><thead><tr>${columnas.map(c => `<th>${c}</th>`).join("")}</tr></thead>
-          <tbody>${filas.map(f => `<tr>${f.map(c => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table>`;
-}
+// ================= USUARIOS =================
+async function renderUsuarios(cont) {
+  let usuarios = await api("/usuarios");
+  const yo = Sesion.usuario.id_usuario;
+  cont.innerHTML = `
+    <div class="encabezado">
+      <h2>Usuarios</h2>
+      <div class="acciones">
+        <input id="buscar-u" class="buscador" placeholder="🔎 Buscar nombre o correo…">
+        <select id="filtro-rol" class="select">
+          <option value="">Todos los roles</option>
+          <option value="administrador">Administradores</option>
+          <option value="proveedor">Proveedores</option>
+          <option value="cliente">Clientes</option>
+        </select>
+      </div>
+    </div>
+    <div class="card tabla-wrap" id="tabla-u"></div>`;
 
-// ---------- Servicios ----------
-async function cargarServiciosAdmin() {
-  serviciosAdmin = await api("/servicios");
-  document.getElementById("tabla-servicios").innerHTML = tabla(
-    ["Nombre", "Descripción", "Min", "Estado", "Acciones"],
-    serviciosAdmin.map(s => [
-      esc(s.nombre), esc(s.descripcion), s.duracion_minutos,
-      `<span class="badge ${s.activo ? "disponible" : "bloqueado"}">${s.activo ? "activo" : "inactivo"}</span>`,
-      `<button class="pequeno" data-editar="${s.id_servicio}">Editar</button>
-       <button class="pequeno ${s.activo ? "peligro" : ""}" data-toggle-serv="${s.id_servicio}">
-         ${s.activo ? "Desactivar" : "Activar"}</button>`,
-    ]));
-}
-
-function limpiarFormServicio() {
-  const f = document.getElementById("form-servicio");
-  f.reset();
-  f.id_servicio.value = "";
-  f.activo.value = "1";
-  document.getElementById("btn-cancelar-edicion").classList.add("oculto");
-}
-
-document.getElementById("form-servicio").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const f = e.target;
-  const cuerpo = {
-    nombre: f.nombre.value, descripcion: f.descripcion.value,
-    duracion_minutos: parseInt(f.duracion.value), activo: f.activo.value === "1",
+  const pintar = () => {
+    const texto = document.getElementById("buscar-u").value.toLowerCase();
+    const rol = document.getElementById("filtro-rol").value;
+    const lista = usuarios.filter(u =>
+      (!rol || u.rol === rol) && (u.nombre + u.correo).toLowerCase().includes(texto));
+    document.getElementById("tabla-u").innerHTML = lista.length ? `
+      <table><thead><tr><th>Usuario</th><th>Correo</th><th>Rol</th><th>Activo</th><th>Registro</th></tr></thead>
+      <tbody>${lista.map(u => `<tr>
+        <td><b>${esc(u.nombre)}</b></td>
+        <td>${esc(u.correo)}</td>
+        <td><select class="select" data-rol="${u.id_usuario}" ${u.id_usuario === yo ? "disabled" : ""}>
+          ${["cliente", "proveedor", "administrador"].map(r =>
+            `<option value="${r}" ${u.rol === r ? "selected" : ""}>${r}</option>`).join("")}
+        </select></td>
+        <td><label class="switch" style="margin:0">
+          <input type="checkbox" data-activo="${u.id_usuario}" ${u.activo ? "checked" : ""}
+            ${u.id_usuario === yo ? "disabled" : ""}><span></span></label></td>
+        <td class="suave">${String(u.fecha_registro).replace("T", " ").slice(0, 16)}</td>
+      </tr>`).join("")}</tbody></table>` : vacio("🔍", "Sin resultados.");
   };
-  try {
-    if (f.id_servicio.value) await api(`/servicios/${f.id_servicio.value}`, "PUT", cuerpo);
-    else await api("/servicios", "POST", cuerpo);
-    mostrarMensaje("Servicio guardado");
-    limpiarFormServicio();
-    await cargarServiciosAdmin();
-  } catch (err) { mostrarMensaje(err.message, "error"); }
-});
 
-document.getElementById("btn-cancelar-edicion").addEventListener("click", limpiarFormServicio);
+  const guardar = async (id, rol, activo) => {
+    try {
+      await api(`/usuarios/${id}`, "PATCH", { rol, activo });
+      toast("Usuario actualizado");
+    } catch (err) { toast(err.message, "error"); }
+    usuarios = await api("/usuarios");
+    pintar();
+  };
 
-document.getElementById("tabla-servicios").addEventListener("click", async (e) => {
-  try {
-    if (e.target.dataset.editar) {
-      const s = serviciosAdmin.find(x => x.id_servicio == e.target.dataset.editar);
-      const f = document.getElementById("form-servicio");
-      f.id_servicio.value = s.id_servicio; f.nombre.value = s.nombre;
-      f.descripcion.value = s.descripcion || ""; f.duracion.value = s.duracion_minutos;
-      f.activo.value = s.activo ? "1" : "0";
-      document.getElementById("btn-cancelar-edicion").classList.remove("oculto");
+  document.getElementById("buscar-u").addEventListener("input", pintar);
+  document.getElementById("filtro-rol").addEventListener("change", pintar);
+  document.getElementById("tabla-u").addEventListener("change", (e) => {
+    if (e.target.dataset.rol) {
+      const u = usuarios.find(x => x.id_usuario == e.target.dataset.rol);
+      guardar(u.id_usuario, e.target.value, !!u.activo);
     }
-    if (e.target.dataset.toggleServ) {
-      const s = serviciosAdmin.find(x => x.id_servicio == e.target.dataset.toggleServ);
-      if (s.activo) await api(`/servicios/${s.id_servicio}`, "DELETE");
-      else await api(`/servicios/${s.id_servicio}`, "PUT",
-        { nombre: s.nombre, descripcion: s.descripcion || "", duracion_minutos: s.duracion_minutos, activo: true });
-      await cargarServiciosAdmin();
+    if (e.target.dataset.activo) {
+      const u = usuarios.find(x => x.id_usuario == e.target.dataset.activo);
+      guardar(u.id_usuario, u.rol, e.target.checked);
     }
-  } catch (err) { mostrarMensaje(err.message, "error"); }
-});
-
-// ---------- Horarios ----------
-async function cargarHorariosAdmin() {
-  const horarios = await api("/horarios");
-  document.getElementById("tabla-horarios").innerHTML = tabla(
-    ["Fecha", "Inicio", "Fin", "Estado", "Acción"],
-    horarios.map(h => [
-      h.fecha, h.hora_inicio, h.hora_fin,
-      `<span class="badge ${h.estado}">${h.estado}</span>`,
-      h.estado === "reservado" ? "—" :
-        `<button class="pequeno" data-horario-estado="${h.id_horario}"
-          data-nuevo="${h.estado === "bloqueado" ? "disponible" : "bloqueado"}">
-          ${h.estado === "bloqueado" ? "Desbloquear" : "Bloquear"}</button>`,
-    ]));
-}
-
-document.getElementById("form-horario").addEventListener("submit", async (e) => {
-  e.preventDefault();
-  const f = e.target;
-  try {
-    await api("/horarios", "POST",
-      { fecha: f.fecha.value, hora_inicio: f.hora_inicio.value, hora_fin: f.hora_fin.value });
-    mostrarMensaje("Horario creado");
-    f.reset();
-    await cargarHorariosAdmin();
-  } catch (err) { mostrarMensaje(err.message, "error"); }
-});
-
-document.getElementById("tabla-horarios").addEventListener("click", async (e) => {
-  if (!e.target.dataset.horarioEstado) return;
-  try {
-    await api(`/horarios/${e.target.dataset.horarioEstado}/estado`, "PATCH", { estado: e.target.dataset.nuevo });
-    await cargarHorariosAdmin();
-  } catch (err) { mostrarMensaje(err.message, "error"); }
-});
-
-// ---------- Citas ----------
-async function cargarCitasAdmin() {
-  const citas = await api("/citas");
-  document.getElementById("tabla-citas").innerHTML = tabla(
-    ["#", "Cliente", "Servicio", "Fecha", "Hora", "Estado", "Acciones"],
-    citas.map(c => [
-      c.id_cita, esc(c.cliente), esc(c.servicio), c.fecha, `${c.hora_inicio} - ${c.hora_fin}`,
-      `<span class="badge ${c.estado}">${c.estado}</span>`,
-      c.estado === "confirmada"
-        ? `<button class="pequeno" data-cita="${c.id_cita}" data-estado="completada">Completar</button>
-           <button class="pequeno peligro" data-cita="${c.id_cita}" data-estado="cancelada">Cancelar</button>` : "",
-    ]));
-}
-
-document.getElementById("tabla-citas").addEventListener("click", async (e) => {
-  if (!e.target.dataset.cita) return;
-  try {
-    await api(`/citas/${e.target.dataset.cita}/estado`, "PATCH", { estado: e.target.dataset.estado });
-    await Promise.all([cargarCitasAdmin(), cargarHorariosAdmin()]);
-  } catch (err) { mostrarMensaje(err.message, "error"); }
-});
-
-// ---------- Usuarios ----------
-async function cargarUsuariosAdmin() {
-  const usuarios = await api("/usuarios");
-  document.getElementById("tabla-usuarios").innerHTML = tabla(
-    ["ID", "Nombre", "Correo", "Rol", "Registro"],
-    usuarios.map(u => [u.id_usuario, esc(u.nombre), esc(u.correo), u.rol, String(u.fecha_registro).replace("T", " ")]));
+  });
+  pintar();
 }
