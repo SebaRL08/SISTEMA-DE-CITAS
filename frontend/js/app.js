@@ -1,30 +1,56 @@
-const vistas = ["vista-auth", "vista-cliente", "vista-admin"];
+// Pestañas de cada rol: cada una llama a una función de render definida en los otros archivos
+const TABS = {
+  cliente: [
+    { id: "explorar", texto: "🔎 Explorar", render: renderExplorar },
+    { id: "citas", texto: "🗓️ Mis citas", render: renderMisCitas },
+  ],
+  proveedor: [
+    { id: "resumen", texto: "📊 Resumen", render: renderResumenProv },
+    { id: "servicios", texto: "🛠️ Servicios", render: renderServicios },
+    { id: "agenda", texto: "🕒 Agenda", render: renderAgenda },
+    { id: "citas", texto: "🗓️ Citas", render: renderCitasProv },
+    { id: "perfil", texto: "👤 Perfil", render: renderPerfil },
+  ],
+  administrador: [
+    { id: "resumen", texto: "📊 Resumen", render: renderResumenAdmin },
+    { id: "usuarios", texto: "👥 Usuarios", render: renderUsuarios },
+    { id: "servicios", texto: "🛠️ Servicios", render: renderServicios },
+    { id: "agenda", texto: "🕒 Agenda", render: renderAgenda },
+    { id: "citas", texto: "🗓️ Citas", render: renderCitasProv },
+  ],
+};
 
-function mostrarVista(id) {
-  vistas.forEach(v => document.getElementById(v).classList.toggle("oculto", v !== id));
+function irA(id) {
+  const rol = Sesion.usuario.rol;
+  const tab = TABS[rol].find(t => t.id === id) || TABS[rol][0];
+  document.querySelectorAll("#nav button").forEach(b => b.classList.toggle("activa", b.dataset.tab === tab.id));
+  const cont = document.getElementById("contenido");
+  cont.innerHTML = cargando();
+  Promise.resolve(tab.render(cont)).catch(e => { cont.innerHTML = vacio("⚠️", esc(e.message)); });
 }
 
 function entrar() {
-  const usuario = Sesion.usuario;
-  if (!Sesion.token || !usuario) { mostrarVista("vista-auth"); return; }
-  document.getElementById("barra-usuario").classList.remove("oculto");
-  document.getElementById("nombre-usuario").textContent = `${usuario.nombre} (${usuario.rol})`;
-  if (usuario.rol === "administrador") { mostrarVista("vista-admin"); iniciarAdmin(); }
-  else { mostrarVista("vista-cliente"); iniciarCliente(); }
+  const u = Sesion.usuario;
+  if (!Sesion.token || !u) return;
+  document.getElementById("vista-auth").classList.add("oculto");
+  document.getElementById("vista-app").classList.remove("oculto");
+  document.getElementById("nombre-usuario").textContent = u.nombre;
+  document.getElementById("rol-usuario").textContent = u.rol;
+  document.getElementById("nav").innerHTML =
+    TABS[u.rol].map(t => `<button data-tab="${t.id}">${t.texto}</button>`).join("");
+  irA(TABS[u.rol][0].id);
 }
 
-// Cambio entre pestañas de login/registro
+document.getElementById("nav").addEventListener("click", (e) => {
+  const b = e.target.closest("[data-tab]");
+  if (b) irA(b.dataset.tab);
+});
+
+// Pestañas de login / registro
 document.querySelectorAll("#vista-auth .tab").forEach(btn => btn.addEventListener("click", () => {
   document.querySelectorAll("#vista-auth .tab").forEach(b => b.classList.toggle("activa", b === btn));
   ["form-login", "form-registro"].forEach(id =>
     document.getElementById(id).classList.toggle("oculto", id !== btn.dataset.form));
-}));
-
-// Pestañas del panel administrador
-document.querySelectorAll("#vista-admin .tab").forEach(btn => btn.addEventListener("click", () => {
-  document.querySelectorAll("#vista-admin .tab").forEach(b => b.classList.toggle("activa", b === btn));
-  document.querySelectorAll("#vista-admin .panel").forEach(p =>
-    p.classList.toggle("oculto", p.id !== btn.dataset.panel));
 }));
 
 document.getElementById("form-login").addEventListener("submit", async (e) => {
@@ -35,19 +61,21 @@ document.getElementById("form-login").addEventListener("submit", async (e) => {
     Sesion.guardar(r.token, r.usuario);
     f.reset();
     entrar();
-  } catch (err) { mostrarMensaje(err.message, "error"); }
+  } catch (err) { toast(err.message, "error"); }
 });
 
 document.getElementById("form-registro").addEventListener("submit", async (e) => {
   e.preventDefault();
   const f = e.target;
   try {
-    await api("/auth/registro", "POST",
-      { nombre: f.nombre.value, correo: f.correo.value, contrasena: f.contrasena.value });
-    mostrarMensaje("Cuenta creada. Ya puedes iniciar sesión.");
+    await api("/auth/registro", "POST", {
+      nombre: f.nombre.value, correo: f.correo.value,
+      contrasena: f.contrasena.value, rol: f.rol.value,
+    });
+    toast("Cuenta creada. Ya puedes iniciar sesión.");
     f.reset();
     document.querySelector('[data-form="form-login"]').click();
-  } catch (err) { mostrarMensaje(err.message, "error"); }
+  } catch (err) { toast(err.message, "error"); }
 });
 
 document.getElementById("btn-salir").addEventListener("click", () => { Sesion.limpiar(); location.reload(); });
