@@ -7,104 +7,67 @@
   <link rel="stylesheet" href="css/styles.css">
 </head>
 <body>
-<header>
-  <h1>📅 Sistema de Citas</h1>
-  <div id="barra-usuario" class="oculto">
-    <span id="nombre-usuario"></span>
-    <button id="btn-salir" class="secundario">Salir</button>
+<div id="toasts"></div>
+
+<!-- ============ ACCESO ============ -->
+<section id="vista-auth" class="auth">
+  <div class="auth-hero">
+    <h1>📅 Citas<span>Fácil</span></h1>
+    <p>Ofrece tus servicios y recibe reservas, o encuentra a tu profesional y agenda en segundos.</p>
+    <ul>
+      <li>✔ Horarios disponibles en tiempo real</li>
+      <li>✔ Sin reservas duplicadas</li>
+      <li>✔ Todo en un solo lugar</li>
+    </ul>
   </div>
-</header>
-
-<main>
-  <div id="mensaje" class="mensaje oculto"></div>
-
-  <!-- ===== LOGIN / REGISTRO ===== -->
-  <section id="vista-auth">
-    <div class="tarjeta estrecha">
-      <div class="tabs">
-        <button class="tab activa" data-form="form-login">Iniciar sesión</button>
-        <button class="tab" data-form="form-registro">Registrarse</button>
-      </div>
-      <form id="form-login">
-        <label>Correo <input type="email" name="correo" required></label>
-        <label>Contraseña <input type="password" name="contrasena" required></label>
-        <button type="submit">Ingresar</button>
-      </form>
-      <form id="form-registro" class="oculto">
-        <label>Nombre completo <input type="text" name="nombre" required minlength="2"></label>
-        <label>Correo <input type="email" name="correo" required></label>
-        <label>Contraseña (mín. 6) <input type="password" name="contrasena" required minlength="6"></label>
-        <button type="submit">Crear cuenta</button>
-      </form>
-    </div>
-  </section>
-
-  <!-- ===== CLIENTE ===== -->
-  <section id="vista-cliente" class="oculto">
-    <div class="tarjeta">
-      <h2>1. Elige un servicio</h2>
-      <div id="lista-servicios" class="grid"></div>
-    </div>
-    <div class="tarjeta">
-      <h2>2. Elige fecha y horario</h2>
-      <div id="lista-fechas" class="chips"></div>
-      <div id="lista-horas" class="chips"></div>
-      <button id="btn-reservar" disabled>Confirmar reserva</button>
-    </div>
-    <div class="tarjeta">
-      <h2>Mis citas</h2>
-      <div id="mis-citas"></div>
-    </div>
-  </section>
-
-  <!-- ===== ADMINISTRADOR ===== -->
-  <section id="vista-admin" class="oculto">
+  <div class="auth-card">
     <div class="tabs">
-      <button class="tab activa" data-panel="panel-servicios">Servicios</button>
-      <button class="tab" data-panel="panel-horarios">Horarios</button>
-      <button class="tab" data-panel="panel-citas">Citas</button>
-      <button class="tab" data-panel="panel-usuarios">Usuarios</button>
+      <button class="tab activa" data-form="form-login">Iniciar sesión</button>
+      <button class="tab" data-form="form-registro">Registrarse</button>
     </div>
+    <form id="form-login">
+      <label>Correo <input type="email" name="correo" required></label>
+      <label>Contraseña <input type="password" name="contrasena" required></label>
+      <button class="btn grande">Ingresar</button>
+    </form>
+    <form id="form-registro" class="oculto">
+      <div class="roles">
+        <label class="rol-op"><input type="radio" name="rol" value="cliente" checked><span>🙋 Quiero agendar citas</span></label>
+        <label class="rol-op"><input type="radio" name="rol" value="proveedor"><span>🛠️ Ofrezco servicios</span></label>
+      </div>
+      <label>Nombre completo <input type="text" name="nombre" required minlength="2"></label>
+      <label>Correo <input type="email" name="correo" required></label>
+      <label>Contraseña (mín. 6) <input type="password" name="contrasena" required minlength="6"></label>
+      <button class="btn grande">Crear cuenta</button>
+    </form>
+  </div>
+</section>
 
-    <div id="panel-servicios" class="tarjeta panel">
-      <h2>Servicios</h2>
-      <form id="form-servicio" class="fila">
-        <input type="hidden" name="id_servicio">
-        <input type="hidden" name="activo" value="1">
-        <input type="text" name="nombre" placeholder="Nombre" required>
-        <input type="text" name="descripcion" placeholder="Descripción">
-        <input type="number" name="duracion" placeholder="Minutos" min="1" required>
-        <button type="submit">Guardar</button>
-        <button type="button" id="btn-cancelar-edicion" class="secundario oculto">Cancelar</button>
-      </form>
-      <div id="tabla-servicios"></div>
+<!-- ============ APLICACIÓN ============ -->
+<div id="vista-app" class="oculto">
+  <header class="topbar">
+    <div class="logo">📅 CitasFácil</div>
+    <nav id="nav"></nav>
+    <div class="usuario">
+      <span id="nombre-usuario"></span>
+      <span id="rol-usuario" class="badge"></span>
+      <button id="btn-salir" class="btn peq ghost">Salir</button>
     </div>
+  </header>
+  <main id="contenido"></main>
+</div>
 
-    <div id="panel-horarios" class="tarjeta panel oculto">
-      <h2>Horarios</h2>
-      <form id="form-horario" class="fila">
-        <input type="date" name="fecha" required>
-        <input type="time" name="hora_inicio" required>
-        <input type="time" name="hora_fin" required>
-        <button type="submit">Crear horario</button>
-      </form>
-      <div id="tabla-horarios"></div>
-    </div>
-
-    <div id="panel-citas" class="tarjeta panel oculto">
-      <h2>Citas registradas</h2>
-      <div id="tabla-citas"></div>
-    </div>
-
-    <div id="panel-usuarios" class="tarjeta panel oculto">
-      <h2>Usuarios registrados</h2>
-      <div id="tabla-usuarios"></div>
-    </div>
-  </section>
-</main>
+<!-- ============ VENTANA EMERGENTE ============ -->
+<div id="modal" class="modal oculto">
+  <div class="modal-caja">
+    <button id="modal-x" class="modal-x">✕</button>
+    <div id="modal-cuerpo"></div>
+  </div>
+</div>
 
 <script src="js/api.js"></script>
 <script src="js/cliente.js"></script>
+<script src="js/proveedor.js"></script>
 <script src="js/admin.js"></script>
 <script src="js/app.js"></script>
 </body>
